@@ -1,10 +1,9 @@
 #include "executor.hpp"
 
 #include "builtins.hpp"
-#include "jobs.hpp"
 
 #include <array>
-#include <csignal>
+#include <cerrno>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -49,12 +48,15 @@ std::vector<char*> build_argv(const parser::Command& cmd,
 
 void attach_terminal(pid_t pgid) {
     if (terminal_attached) {
-        tcsetpgrp(shell_terminal, pgid);
+        if (tcsetpgrp(shell_terminal, pgid) < 0 && errno != ENOTTY) {
+            // Ignore errors - process group might not exist yet or already gone
+        }
     }
 }
 
 void reclaim_terminal() {
     if (terminal_attached) {
+        // Always try to reclaim terminal, ignore errors
         tcsetpgrp(shell_terminal, shell_pgid);
     }
 }
@@ -71,15 +73,14 @@ pid_t get_shell_pgid() {
 }
 
 int execute(const parser::ParseResult& plan,
-            const std::string& raw_command,
-            builtins::History& history,
             ExecutionContext& ctx) {
     if (plan.pipeline.empty()) {
         return 0;
     }
 
+    // Handle builtin commands (must be single command, no pipes)
     if (plan.pipeline.size() == 1 && builtins::is_builtin(plan.pipeline[0])) {
-        ctx.last_status = builtins::run(plan.pipeline[0], ctx.should_exit, history);
+        ctx.last_status = builtins::run(plan.pipeline[0], ctx.should_exit);
         return ctx.last_status;
     }
 
@@ -112,13 +113,6 @@ int execute(const parser::ParseResult& plan,
                 pgid = ::getpid();
             }
             ::setpgid(0, pgid);
-            if (!plan.background) {
-                struct sigaction action {};
-                action.sa_handler = SIG_DFL;
-                sigemptyset(&action.sa_mask);
-                action.sa_flags = 0;
-                sigaction(SIGINT, &action, nullptr);
-            }
 
             if (i > 0) {
                 ::dup2(pipes[i - 1][0], STDIN_FILENO);
@@ -159,24 +153,30 @@ int execute(const parser::ParseResult& plan,
         close_pipe(pipes.back());
     }
 
-    if (plan.background) {
-        const int job_id = jobs::add_job(pgid, raw_command, true, static_cast<int>(stages));
-        std::cout << '[' << job_id << "] " << pgid << " " << raw_command << '\n';
-        ctx.last_status = 0;
-        return 0;
+    // Attach terminal to child process group
+    attach_terminal(pgid);
+    
+    // Wait for all processes in the pipeline to complete
+    int exit_code = 0;
+    for (pid_t pid : pids) {
+        int status = 0;
+        pid_t waited = ::waitpid(pid, &status, 0);
+        if (waited > 0) {
+            if (WIFEXITED(status)) {
+                exit_code = WEXITSTATUS(status);
+            } else if (WIFSIGNALED(status)) {
+                exit_code = 128 + WTERMSIG(status);  // Standard shell convention
+            }
+        } else if (waited < 0 && errno != ECHILD) {
+            perror("waitpid");
+        }
     }
 
-    attach_terminal(pgid);
-    int status = 0;
-    pid_t waited = 0;
-    do {
-        waited = ::waitpid(-pgid, &status, WUNTRACED);
-    } while (waited > 0 && !WIFEXITED(status) && !WIFSIGNALED(status));
-
+    // Always reclaim terminal, even if there were errors
     reclaim_terminal();
-    jobs::mark_job_finished(pgid, status);
-    ctx.last_status = status;
-    return status;
+    
+    ctx.last_status = exit_code;
+    return exit_code;
 }
 
 } // namespace executor

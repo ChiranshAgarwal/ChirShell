@@ -1,0 +1,38 @@
+# Object files
+*.o
+*.obj
+
+# Binary executables
+chirshell
+bin/
+
+# Build directories
+build/
+obj/
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+

@@ -6,16 +6,11 @@
 
 #include "parser.hpp"
 #include <string>
-#include <vector>
 
 namespace builtins {
 
-using History = std::vector<std::string>;
-
 bool is_builtin(const parser::Command& cmd);
-int run(const parser::Command& cmd, bool& should_exit, History& history);
+int run(const parser::Command& cmd, bool& should_exit);
 
 } // namespace builtins
-
-
 

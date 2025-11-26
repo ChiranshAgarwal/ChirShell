@@ -60,13 +60,6 @@ ParseResult parse_line(const std::string& line) {
                 continue;
             }
 
-            if (ch == '&') {
-                flush_token(token, current);
-                flush_command(current, result);
-                result.background = true;
-                continue;
-            }
-
             if (std::isspace(static_cast<unsigned char>(ch))) {
                 flush_token(token, current);
                 continue;

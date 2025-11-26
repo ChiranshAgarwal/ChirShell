@@ -2,16 +2,22 @@
 #include "executor.hpp"
 #include "parser.hpp"
 #include "prompt.hpp"
-#include "signals.hpp"
-#include "jobs.hpp"
 
 #include <cerrno>
 #include <csignal>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
+
+namespace {
+void sigint_handler(int) {
+    std::cout << '\n';
+    std::cout.flush();
+}
+} // namespace
 
 int main() {
     const pid_t shell_pid = ::getpid();
@@ -23,11 +29,16 @@ int main() {
         ::tcsetpgrp(STDIN_FILENO, shell_pid);
     }
 
-    executor::set_shell_pgid(shell_pid);
-    jobs::initialize(shell_pid);
-    signals::install_handlers();
+    // Minimal signal handling for interactive use
+    // Ignore SIGTSTP (Ctrl+Z) so shell doesn't get stopped
+    ::signal(SIGTSTP, SIG_IGN);
+    // Ignore SIGTTOU (sent when changing terminal foreground process group)
+    ::signal(SIGTTOU, SIG_IGN);
+    // Handle SIGINT (Ctrl+C) - just print newline and continue
+    ::signal(SIGINT, sigint_handler);
 
-    builtins::History history;
+    executor::set_shell_pgid(shell_pid);
+
     executor::ExecutionContext ctx;
 
     while (!ctx.should_exit) {
@@ -45,17 +56,22 @@ int main() {
             continue;
         }
 
-        history.push_back(line);
         parser::ParseResult plan = parser::parse_line(line);
 
         if (plan.pipeline.empty()) {
             continue;
         }
 
-        executor::execute(plan, line, history, ctx);
+        // Execute command - continue loop even if command fails
+        try {
+            executor::execute(plan, ctx);
+        } catch (const std::exception& e) {
+            std::cerr << "chirshell: error: " << e.what() << '\n';
+        } catch (...) {
+            std::cerr << "chirshell: unknown error occurred\n";
+        }
     }
 
-    jobs::shutdown();
     return 0;
 }
 

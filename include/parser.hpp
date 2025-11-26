@@ -15,7 +15,6 @@ struct Command {
 
 struct ParseResult {
     std::vector<Command> pipeline;
-    bool background = false;
 };
 
 ParseResult parse_line(const std::string& line);

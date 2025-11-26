@@ -8,6 +8,7 @@
 #include "parser.hpp"
 #include <string>
 #include <vector>
+#include <sys/types.h>
 
 namespace executor {
 
@@ -17,8 +18,6 @@ struct ExecutionContext {
 };
 
 int execute(const parser::ParseResult& plan,
-            const std::string& raw_command,
-            builtins::History& history,
             ExecutionContext& ctx);
 
 void set_shell_pgid(pid_t pgid);

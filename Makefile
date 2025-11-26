@@ -1,32 +1,38 @@
 CXX := g++
-CXXFLAGS := -std=c++20 -Wall -Wextra -Wpedantic -pthread -Iinclude
-LDFLAGS := -pthread
+CXXFLAGS := -std=c++20 -Wall -Wextra -Wpedantic -Iinclude
+LDFLAGS :=
+
+# Directories
+BUILD_DIR := build/obj
+BIN_DIR := bin
 
 SRCS := \
 	src/main.cpp \
 	src/parser.cpp \
 	src/executor.cpp \
 	src/builtins.cpp \
-	src/jobs.cpp \
-	src/signals.cpp \
 	src/prompt.cpp
 
-OBJS := $(SRCS:.cpp=.o)
+# Object files go to build/obj/
+OBJS := $(SRCS:src/%.cpp=$(BUILD_DIR)/%.o)
 
-TARGET := chirshell
+TARGET := $(BIN_DIR)/chirshell
 
-.PHONY: all clean
+.PHONY: all clean directories
 
-all: $(TARGET)
+all: directories $(TARGET)
 
-$(TARGET): $(OBJS)
+directories:
+	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
+
+$(TARGET): $(OBJS) | directories
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
-%.o: %.cpp
+$(BUILD_DIR)/%.o: src/%.cpp | directories
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJS) $(TARGET)
+	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 
 
